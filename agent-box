@@ -1,0 +1,49 @@
+#!/bin/bash
+# ro-bind each $PATH dir under $HOME (r-x only), plus the targets of symlinks inside
+# them (e.g. ~/.local/bin/claude -> ~/.local/share/claude/versions/X). Nothing else of ~.
+# ponytail: one level of symlinks; a target in a */bin dir binds its prefix (venv/app dir).
+binds=()
+declare -A seen
+add() { [[ -e $1 && ! ${seen[$1]} ]] && seen[$1]=1 && binds+=(--ro-bind "$1" "$1"); }
+
+# toolchain data the shims need (ro). Add here when a tool breaks in the box.
+for t in ~/.rustup ~/.juliaup ~/.julia "$(go env GOROOT 2>/dev/null)"; do
+  [[ $t == "$HOME"/* ]] && add "$t"
+done
+
+IFS=: read -ra dirs <<< "$PATH"
+for d in "${dirs[@]}"; do
+  [[ $d == "$HOME"/* && -d $d ]] || continue
+  add "$d"
+  for f in "$d"/*; do
+    [[ -L $f ]] || continue
+    t=$(realpath -q "$f") || continue
+    [[ $t == "$HOME"/* && $t != "$d"/* ]] || continue
+    [[ $(basename "$(dirname "$t")") == bin ]] && t=$(dirname "$(dirname "$t")")
+    add "$t"
+  done
+done
+
+# claude can't self-update inside (its install dir is ro), so update on the host first.
+[[ $(basename "${1:-}") == claude ]] && { "$1" update || true; }
+
+exec bwrap \
+  --ro-bind / / \
+  --dev /dev \
+  --proc /proc \
+  --unshare-pid \
+  --unshare-ipc \
+  --die-with-parent \
+  --tmpfs /tmp \
+  --tmpfs ~ \
+  "${binds[@]}" \
+  --bind ~/phd ~/phd \
+  --bind ~/lab ~/lab \
+  --bind ~/.claude ~/.claude \
+  --bind ~/.claude.json ~/.claude.json \
+  --ro-bind "$(realpath "$0")" "$(realpath "$0")" \
+  --ro-bind-try ~/.claude/settings.json ~/.claude/settings.json \
+  --ro-bind-try ~/.claude/hooks ~/.claude/hooks \
+  --ro-bind-try ~/.claude/plugins ~/.claude/plugins \
+  --setenv AGENT_BOX 1 \
+  "$@"
