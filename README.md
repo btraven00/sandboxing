@@ -7,8 +7,25 @@ Notes and scripts for running agents (Claude Code, etc.) in a box.
 `agent-box` — bubblewrap wrapper. Lives here; install with `ln -s "$PWD/agent-box" ~/.local/bin/`.
 
 ```sh
-agent-box claude
-agent-box bash
+agent-box claude            # every namespace in the config
+agent-box -n lab bash       # only [lab] (plus the top lines)
+alias claude='agent-box -n phd claude'
+```
+
+Read-write dirs come from `~/.clankerjail` (or `$CLANKERJAIL`). Lines before any `[section]` are
+always bound; `[name]` sections are namespaces, picked with `-n name`. Suffix `:ro` for read-only; a child overrides its parent
+(`~/phd` + `~/phd/data:ro` = writable phd with a read-only `data`), in any line order.
+
+```
+~/.claude
+~/.claude.json
+
+[phd]
+~/phd
+
+[lab]
+~/lab
+~/data:ro
 ```
 
 What the box sees:
@@ -17,7 +34,7 @@ What the box sees:
 |------|--------|
 | `/` | read-only |
 | `/tmp`, `~` | empty tmpfs (wiped on exit) |
-| `~/phd`, `~/lab`, `~/.claude`, `~/.claude.json` | read-write |
+| paths from `~/.clankerjail` (global + chosen namespace) | read-write (or `:ro`) |
 | each `$PATH` dir under `~` + targets of symlinks in it | read-only |
 | toolchains: `~/.rustup`, `~/.juliaup`, `~/.julia`, go's GOROOT | read-only |
 | `agent-box` itself, `~/.claude/{settings.json,hooks,plugins}` | read-only (no editing the box or host-side hooks) |

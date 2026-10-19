@@ -24,6 +24,30 @@ for d in "${dirs[@]}"; do
   done
 done
 
+# rw dirs from the config (~/.clankerjail). Lines before any [section] are always bound;
+# `-n NAME` adds only [NAME], no -n adds every section. `path:ro` binds read-only.
+conf=${CLANKERJAIL:-~/.clankerjail}
+ns=
+[[ ${1:-} == -n ]] && { ns=$2; shift 2; }
+[[ -f $conf ]] || { echo "agent-box: missing $conf (see README)" >&2; exit 1; }
+cbinds=() ents=() sec= found=
+while read -r line; do
+  [[ -z $line || $line == \#* ]] && continue
+  if [[ $line =~ ^\[(.+)\]$ ]]; then
+    sec=${BASH_REMATCH[1]}; [[ $sec == "$ns" ]] && found=1; continue
+  fi
+  [[ -z $sec || -z $ns || $sec == "$ns" ]] || continue
+  p=${line/#\~/$HOME} mode=--bind
+  [[ $p == *:ro ]] && { p=${p%:ro}; mode=--ro-bind; }
+  ents+=("$p"$'\t'"$mode")
+done < "$conf"
+[[ -z $ns || $found ]] || { echo "agent-box: no [$ns] in $conf" >&2; exit 1; }
+# later binds mount over earlier ones: sort so a parent always precedes its children
+# (~/phd before ~/phd/data:ro), whatever the order in the file.
+while IFS=$'\t' read -r p mode; do
+  [[ $p ]] && cbinds+=("$mode" "$p" "$p")
+done < <(printf '%s\n' "${ents[@]}" | sort -s -t$'\t' -k1,1)
+
 # claude can't self-update inside (its install dir is ro), so update on the host first.
 [[ $(basename "${1:-}") == claude ]] && { "$1" update || true; }
 
@@ -37,10 +61,7 @@ exec bwrap \
   --tmpfs /tmp \
   --tmpfs ~ \
   "${binds[@]}" \
-  --bind ~/phd ~/phd \
-  --bind ~/lab ~/lab \
-  --bind ~/.claude ~/.claude \
-  --bind ~/.claude.json ~/.claude.json \
+  "${cbinds[@]}" \
   --ro-bind "$(realpath "$0")" "$(realpath "$0")" \
   --ro-bind-try ~/.claude/settings.json ~/.claude/settings.json \
   --ro-bind-try ~/.claude/hooks ~/.claude/hooks \
