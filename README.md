@@ -48,6 +48,12 @@ alias claude='agent-box -n phd claude'
 agent-box -n lab claude
 ```
 
+### Profiles
+
+A profile is a whole separate config: `agent-box -p NAME` reads `~/.clankerjail.NAME` instead of
+`~/.clankerjail` (same format, its own top lines and sections). Combine with `-n` in any order:
+`agent-box -p personal -n blog claude`. `~/.clankerjail` stays the default profile.
+
 ### What the box sees
 
 | path | access |

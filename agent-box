@@ -26,9 +26,13 @@ done
 
 # rw dirs from the config (~/.clankerjail). Lines before any [section] are always bound;
 # `-n NAME` adds only [NAME], no -n adds every section. `path:ro` binds read-only.
+# `-p NAME` uses the profile ~/.clankerjail.NAME instead (a separate sandbox, own top lines).
 conf=${CLANKERJAIL:-~/.clankerjail}
 ns=
-[[ ${1:-} == -n ]] && { ns=$2; shift 2; }
+while [[ ${1:-} == -[np] ]]; do
+  [[ $1 == -n ]] && ns=$2 || conf=~/.clankerjail.$2
+  shift 2
+done
 [[ -f $conf ]] || { echo "agent-box: missing $conf (see README)" >&2; exit 1; }
 cbinds=() ents=() sec= found=
 while read -r line; do
